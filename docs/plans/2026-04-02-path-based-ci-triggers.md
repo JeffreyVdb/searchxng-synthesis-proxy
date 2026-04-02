@@ -1,4 +1,4 @@
-Status: DRAFT
+Status: COMPLETED
 
 # Plan: Path-based CI triggers for container builds
 
