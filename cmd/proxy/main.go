@@ -10,11 +10,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/example/search-synthesis-proxy/internal/api"
-	"github.com/example/search-synthesis-proxy/internal/config"
-	"github.com/example/search-synthesis-proxy/internal/llm"
-	"github.com/example/search-synthesis-proxy/internal/proxy"
-	"github.com/example/search-synthesis-proxy/internal/searx"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/api"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/config"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/llm"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/proxy"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/searx"
 )
 
 func main() {

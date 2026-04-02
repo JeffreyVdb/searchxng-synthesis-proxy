@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/example/search-synthesis-proxy/internal/proxy"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/proxy"
 )
 
 // Service is the interface for the proxy service.

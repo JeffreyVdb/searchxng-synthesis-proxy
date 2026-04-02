@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/example/search-synthesis-proxy/internal/config"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/config"
 )
 
 func testConfig() config.Config {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/example/search-synthesis-proxy/internal/searx"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/searx"
 )
 
 // fakeSearcher implements Searcher for tests.

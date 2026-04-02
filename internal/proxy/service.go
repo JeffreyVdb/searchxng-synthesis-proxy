@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/example/search-synthesis-proxy/internal/searx"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/searx"
 )
 
 type sourceForResult = struct {

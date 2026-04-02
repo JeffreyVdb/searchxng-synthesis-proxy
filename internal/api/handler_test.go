@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/example/search-synthesis-proxy/internal/proxy"
+	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/proxy"
 )
 
 // fakeService implements api.Service for tests.

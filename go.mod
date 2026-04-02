@@ -1,4 +1,4 @@
-module github.com/example/search-synthesis-proxy
+module github.com/JeffreyVdb/searchxng-synthesis-proxy
 
 go 1.24
 
