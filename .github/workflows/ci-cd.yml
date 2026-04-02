@@ -14,6 +14,64 @@ env:
   IMAGE_NAME: ghcr.io/jeffreyvdb/searchxng-synthesis-proxy
 
 jobs:
+  changes:
+    name: Detect build-relevant changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_build: ${{ steps.detect.outputs.should_build }}
+      matched_files: ${{ steps.detect.outputs.matched_files }}
+    steps:
+      - name: Detect whether build should run
+        id: detect
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = context.ref;
+
+            // Release tags are intentional publish events.
+            if (ref.startsWith('refs/tags/v')) {
+              core.setOutput('should_build', 'true');
+              core.setOutput('matched_files', '<tag push: forced build>');
+              return;
+            }
+
+            const before = context.payload.before;
+            const after = context.sha;
+
+            // Handle initial pushes or force pushes where 'before' is all zeros.
+            if (!before || before === '0000000000000000000000000000000000000000') {
+              core.info('Initial push or force push detected; defaulting to should_build=true');
+              core.setOutput('should_build', 'true');
+              core.setOutput('matched_files', '<initial/force push: forced build>');
+              return;
+            }
+
+            const response = await github.rest.repos.compareCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              base: before,
+              head: after,
+            });
+
+            const files = (response.data.files || []).map(file => file.filename);
+
+            const matched = files.filter(file =>
+              file.endsWith('.go') ||
+              file === 'go.mod' ||
+              file === 'go.sum' ||
+              file === 'Containerfile' ||
+              file === '.dockerignore' ||
+              file.startsWith('.github/workflows/')
+            );
+
+            core.info(`Changed files: ${files.join(', ') || '<none>'}`);
+            core.info(`Matched build files: ${matched.join(', ') || '<none>'}`);
+
+            core.setOutput('matched_files', matched.join(', '));
+            core.setOutput('should_build', matched.length > 0 ? 'true' : 'false');
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -35,7 +93,10 @@ jobs:
   build-and-push:
     name: Build and push container
     runs-on: ubuntu-latest
-    needs: test
+    needs:
+      - test
+      - changes
+    if: needs.changes.outputs.should_build == 'true'
     permissions:
       contents: read
       packages: write
