@@ -1,4 +1,4 @@
-Status: DRAFT
+Status: COMPLETED
 
 # Plan: Tagged container releases
 
