@@ -6,7 +6,7 @@ Status: DRAFT
 
 Change the container publishing flow so that:
 
-1. a version tag such as `v1.0.0` publishes **both** `1.0.0` and `latest`
+1. a stable version tag such as `v1.0.0` publishes both `1.0.0` and `latest`; pre-release tags (e.g. `v1.0.0-rc.1`) publish only the semver tag
 2. `latest` is no longer overwritten by ordinary pushes to `main`
 3. release builds are serialized so two tag pushes cannot race on `latest`
 4. the existing path-based change detection on `main` still works
@@ -32,7 +32,7 @@ That means `latest` tracks ordinary pushes to `main`, while release tags publish
 Split the current mixed-purpose workflow into **two workflows**:
 
 1. **Main CI workflow**: keep the current path-based change detection and test behavior for `main` pushes, but stop publishing `latest` there.
-2. **Release workflow**: trigger only on `v*.*.*` tags, always run tests, always publish the semver tag and `latest`, and serialize release builds with `concurrency`.
+2. **Release workflow**: trigger only on `v*.*.*` tags, always run tests, publish the semver tag, and publish `latest` **only for stable tags** (`vMAJOR.MINOR.PATCH` with no suffix); serialize release builds with `concurrency`.
 
 ## Why split instead of keeping one workflow
 
@@ -216,6 +216,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Decide whether this tag should publish latest
+        id: latest
+        run: |
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "publish_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish_latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -225,7 +234,7 @@ jobs:
             latest=false
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ steps.latest.outputs.publish_latest == 'true' }}
           labels: |
             org.opencontainers.image.title=searchxng-synthesis-proxy
             org.opencontainers.image.description=Search Synthesis Proxy
@@ -337,45 +346,34 @@ The queued order determines which tag writes `latest` last.
 
 In the normal case where tags are pushed oldest-to-newest, `latest` ends on the newer version.
 
-If someone pushes tags out of version order later, `latest` will follow **push order**, not semver order. For example, pushing `v1.0.0` after `v1.0.1` would move `latest` backward.
+If someone pushes stable tags out of version order later, `latest` will follow **push order**, not semver order. For example, pushing `v1.0.0` after `v1.0.1` would move `latest` backward.
 
-That behavior is acceptable for the initial change because it matches the explicit rule “tag pushes publish `latest`”, but it should be documented.
+Pre-release tags (e.g. `v1.0.0-rc.1`) never publish `latest` due to the stable-tag gate, so they cannot interfere with the stable `latest` pointer.
 
-## Optional hardening if semver-order `latest` is required
+## Stable-tag gate for `latest`
 
-If `latest` must always mean “highest semver release” rather than “most recently pushed release tag”, add a small gate in `release.yml` before metadata extraction.
+The release workflow includes a gate that prevents pre-release tags from publishing `latest`.
 
-### Additional step
+Only tags matching `^v[0-9]+\.[0-9]+\.[0-9]+$` (stable semver, no suffix) publish `latest`. Tags like `v1.0.0-rc.1` or `v1.0.0-beta` still publish the semver tag (e.g. `1.0.0-rc.1`) but do **not** move `latest`.
+
+### Gate step in `release.yml`
 
 ```yaml
-      - name: Decide whether this tag should move latest
-        id: latest-gate
+      - name: Decide whether this tag should publish latest
+        id: latest
         run: |
-          git fetch --force --tags origin
-          highest_tag="$(git tag -l 'v*.*.*' --sort=-version:refname | head -n1)"
-          if [ "$highest_tag" = "$GITHUB_REF_NAME" ]; then
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "publish_latest=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish_latest=false" >> "$GITHUB_OUTPUT"
           fi
 ```
 
-### Metadata change for gated `latest`
+The `latest` tag in the metadata step is conditional on this output:
 
 ```yaml
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          flavor: |
-            latest=false
-          tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ steps.latest-gate.outputs.publish_latest == 'true' }}
+            type=raw,value=latest,enable=${{ steps.latest.outputs.publish_latest == 'true' }}
 ```
-
-I would treat this as a **follow-up hardening decision**, not part of the minimum required change, because it slightly changes the simple rule “every release tag also updates `latest`”.
 
 ## Validation checklist
 
@@ -397,15 +395,20 @@ I would treat this as a **follow-up hardening decision**, not part of the minimu
 
 ### Release workflow validation
 
-1. Push `v1.0.0`
+1. Push `v1.0.0` (stable tag)
    - `test` runs
    - image publishes `1.0.0` and `latest`
 
-2. Push `v1.0.1`
+2. Push `v1.0.1` (stable tag)
    - `test` runs
    - image publishes `1.0.1` and `latest`
 
-3. Push two release tags in quick succession
+3. Push `v1.0.0-rc.1` (pre-release tag)
+   - `test` runs
+   - image publishes `1.0.0-rc.1` only
+   - `latest` is **not** updated
+
+4. Push two release tags in quick succession
    - second run waits behind the first
    - no concurrent writes to `latest`
 
@@ -417,7 +420,8 @@ This change is complete when all of the following are true:
 - `main` pushes still use the existing path-based build gating
 - `main` pushes no longer overwrite `latest`
 - `v*.*.*` tag pushes always run tests and then publish the release image
-- release images publish both the semver tag and `latest`
+- stable tags (`vMAJOR.MINOR.PATCH`, no suffix) publish both the semver tag and `latest`
+- pre-release tags (e.g. `v1.0.0-rc.1`) publish the semver tag but **not** `latest`
 - release workflows are serialized with `concurrency`
 - two near-simultaneous tag pushes cannot race on `latest`
 
@@ -425,4 +429,4 @@ This change is complete when all of the following are true:
 
 - Keep the current build steps unchanged where possible; the main changes are trigger separation, tag policy, and release concurrency.
 - Reusing the existing `test` job in both workflows via `workflow_call` is possible later, but duplicating the job now is the lowest-risk way to land the release behavior change.
-- If downstream consumers already rely on `:latest` meaning “current main branch”, document the move to `:main` in the release PR.
+- If downstream consumers already rely on `:latest` meaning "current main branch", document the move to `:main` in the release PR.
