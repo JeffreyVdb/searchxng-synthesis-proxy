@@ -37,6 +37,10 @@ type Meta struct {
 }
 
 // Error represents an upstream error returned by the proxy.
+// The Message field contains the upstream error text; use PublicMessage for
+// safe display to external callers.
+// Use UserMessage() to get a sanitized message safe for external callers.
+// The underlying details are kept for logging only.
 type Error struct {
 	StatusCode int
 	Code       string
@@ -45,6 +49,58 @@ type Error struct {
 
 func (e *Error) Error() string {
 	return fmt.Sprintf("upstream %d: %s: %s", e.StatusCode, e.Code, e.Message)
+}
+
+// UserMessage returns a sanitized message safe for external callers.
+// It strips internal transport details and hostnames.
+func (e *Error) UserMessage() string {
+	switch {
+	case e.StatusCode == 0:
+		// Non-HTTP transport error (connection refused, timeout, DNS, etc.)
+		return "search upstream unavailable"
+	default:
+		return fmt.Sprintf("search upstream returned an error (%s)", e.Code)
+	}
+}
+
+// TransportError represents a failure to reach the upstream proxy
+// (connection refused, DNS failure, timeout, TLS error, etc.).
+// It carries a safe public message and the original cause for logging.
+type TransportError struct {
+	// Cause is the original error for logging.
+	Cause error
+}
+
+func (e *TransportError) Error() string {
+	return fmt.Sprintf("transport error: %v", e.Cause)
+}
+
+func (e *TransportError) Unwrap() error {
+	return e.Cause
+}
+
+// UserMessage returns a sanitized message safe for external callers.
+func (e *TransportError) UserMessage() string {
+	return "search upstream unavailable"
+}
+
+// DecodeError represents a failure to decode the upstream response body.
+// It carries a safe public message and the original cause for logging.
+type DecodeError struct {
+	Cause error
+}
+
+func (e *DecodeError) Error() string {
+	return fmt.Sprintf("decode error: %v", e.Cause)
+}
+
+func (e *DecodeError) Unwrap() error {
+	return e.Cause
+}
+
+// UserMessage returns a sanitized message safe for external callers.
+func (e *DecodeError) UserMessage() string {
+	return "search upstream returned an invalid response"
 }
 
 // Client calls the search synthesis proxy over HTTP.
@@ -83,13 +139,13 @@ func (c *Client) Search(ctx context.Context, query string) (*Response, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request to upstream: %w", err)
+		return nil, &TransportError{Cause: err}
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MB limit
 	if err != nil {
-		return nil, fmt.Errorf("reading upstream response: %w", err)
+		return nil, &DecodeError{Cause: err}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -98,7 +154,7 @@ func (c *Client) Search(ctx context.Context, query string) (*Response, error) {
 
 	var result Response
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("decoding upstream response: %w", err)
+		return nil, &DecodeError{Cause: err}
 	}
 
 	return &result, nil

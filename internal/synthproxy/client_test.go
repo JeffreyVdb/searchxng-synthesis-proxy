@@ -145,6 +145,16 @@ func TestClient_Search_Timeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
+
+	var transportErr *TransportError
+	if err, ok := err.(*TransportError); !ok {
+		t.Fatalf("error type = %T, want *TransportError", err)
+	} else {
+		transportErr = err
+	}
+	if transportErr.UserMessage() != "search upstream unavailable" {
+		t.Errorf("UserMessage() = %q, want %q", transportErr.UserMessage(), "search upstream unavailable")
+	}
 }
 
 func TestClient_Search_MalformedSuccessPayload(t *testing.T) {
@@ -159,6 +169,14 @@ func TestClient_Search_MalformedSuccessPayload(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for malformed response")
 	}
+
+	decodeErr, ok := err.(*DecodeError)
+	if !ok {
+		t.Fatalf("error type = %T, want *DecodeError", err)
+	}
+	if decodeErr.UserMessage() != "search upstream returned an invalid response" {
+		t.Errorf("UserMessage() = %q, want %q", decodeErr.UserMessage(), "search upstream returned an invalid response")
+	}
 }
 
 func TestClient_Search_ConnectionRefused(t *testing.T) {
@@ -166,5 +184,13 @@ func TestClient_Search_ConnectionRefused(t *testing.T) {
 	_, err := client.Search(context.Background(), "test")
 	if err == nil {
 		t.Fatal("expected connection error")
+	}
+
+	transportErr, ok := err.(*TransportError)
+	if !ok {
+		t.Fatalf("error type = %T, want *TransportError", err)
+	}
+	if transportErr.UserMessage() != "search upstream unavailable" {
+		t.Errorf("UserMessage() = %q, want %q", transportErr.UserMessage(), "search upstream unavailable")
 	}
 }

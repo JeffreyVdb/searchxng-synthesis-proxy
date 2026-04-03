@@ -49,14 +49,20 @@ func run() error {
 		slog.String("addr", cfg.Addr()),
 		slog.String("upstream", cfg.ProxyBaseURL),
 	)
+	serveErrCh := make(chan error, 1)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("server error", slog.String("error", err.Error()))
+			serveErrCh <- err
 		}
 	}()
 
-	<-ctx.Done()
-	logger.Info("shutting down")
+	select {
+	case <-ctx.Done():
+		logger.Info("shutting down")
+	case err := <-serveErrCh:
+		// Serve failed before shutdown signal; return immediately.
+		return fmt.Errorf("listen and serve: %w", err)
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()

@@ -101,12 +101,12 @@ Add a remote MCP server in your OpenCode configuration file (typically `~/.confi
 
 ```json
 {
+  "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "servers": {
-      "search": {
-        "url": "http://127.0.0.1:8090/mcp/sse",
-        "transport": "sse"
-      }
+    "search": {
+      "type": "remote",
+      "url": "http://127.0.0.1:8090/mcp/sse",
+      "enabled": true
     }
   }
 }
@@ -116,12 +116,12 @@ For a remotely deployed server, replace the URL accordingly:
 
 ```json
 {
+  "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "servers": {
-      "search": {
-        "url": "https://synth.example.com/mcp/sse",
-        "transport": "sse"
-      }
+    "search": {
+      "type": "remote",
+      "url": "https://synth.example.com/mcp/sse",
+      "enabled": true
     }
   }
 }

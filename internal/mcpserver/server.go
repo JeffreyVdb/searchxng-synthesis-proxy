@@ -6,7 +6,6 @@ package mcpserver
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 
@@ -72,7 +71,7 @@ func (h *searchHandler) handle(ctx context.Context, request mcp.CallToolRequest)
 			slog.String("query", query),
 			slog.String("error", err.Error()),
 		)
-		return mcp.NewToolResultError(fmt.Sprintf("search failed: %s", err.Error())), nil
+		return mcp.NewToolResultError(sanitizeError(err)), nil
 	}
 
 	text := FormatResponse(resp)
@@ -84,4 +83,17 @@ func (h *searchHandler) handle(ctx context.Context, request mcp.CallToolRequest)
 	result.StructuredContent = resp
 
 	return result, nil
+}
+
+// sanitizeError returns a safe, user-facing message from an upstream error.
+// It never exposes internal transport details (hostnames, URLs, dial errors).
+// The full error is already logged by the caller.
+func sanitizeError(err error) string {
+	// Check for typed upstream errors that implement UserMessage().
+	switch e := err.(type) {
+	case interface{ UserMessage() string }:
+		return e.UserMessage()
+	default:
+		return "search failed"
+	}
 }

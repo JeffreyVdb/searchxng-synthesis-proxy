@@ -1,12 +1,22 @@
 package main
 
 import (
+	"os"
+	"strings"
 	"testing"
 )
 
 func TestRun_MissingConfig(t *testing.T) {
-	// Without MCP_PROXY_BASE_URL, run() should return an error.
-	// We can't easily test the full run() without an env, so test the config
-	// loading path separately (covered by config/mcp_test.go).
-	// This test just ensures the binary compiles.
+	// Ensure MCP_PROXY_BASE_URL is unset so config loading fails.
+	orig := os.Getenv("MCP_PROXY_BASE_URL")
+	os.Unsetenv("MCP_PROXY_BASE_URL")
+	defer os.Setenv("MCP_PROXY_BASE_URL", orig)
+
+	err := run()
+	if err == nil {
+		t.Fatal("expected error when MCP_PROXY_BASE_URL is not set")
+	}
+	if !strings.Contains(err.Error(), "MCP_PROXY_BASE_URL") {
+		t.Errorf("error = %q, want mention of MCP_PROXY_BASE_URL", err.Error())
+	}
 }

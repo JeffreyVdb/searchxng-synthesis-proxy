@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -114,8 +115,77 @@ func TestSearchHandler_UpstreamFailure(t *testing.T) {
 	if !ok {
 		t.Fatalf("content[0] type = %T, want TextContent", result.Content[0])
 	}
-	if !strings.Contains(textContent.Text, "search backend failed") {
-		t.Errorf("text = %q, want upstream error message", textContent.Text)
+	// The sanitized message should NOT contain internal transport details.
+	if strings.Contains(textContent.Text, "search backend failed") {
+		t.Errorf("text = %q, should not contain raw upstream message", textContent.Text)
+	}
+	if !strings.Contains(textContent.Text, "search_upstream_error") {
+		t.Errorf("text = %q, want sanitized message with error code", textContent.Text)
+	}
+}
+
+func TestSearchHandler_TransportError(t *testing.T) {
+	client := &stubClient{
+		err: &synthproxy.TransportError{Cause: fmt.Errorf("dial tcp 10.0.0.5:8080: connection refused")},
+	}
+
+	handler := newSearchHandler(slog.Default(), client)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "search"
+	req.Params.Arguments = map[string]interface{}{"query": "test"}
+
+	result, err := handler.handle(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handle() error: %v", err)
+	}
+
+	if result.IsError == false {
+		t.Fatal("result should be an error for transport failure")
+	}
+
+	textContent, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("content[0] type = %T, want TextContent", result.Content[0])
+	}
+	// Must not leak internal IPs or transport details.
+	if strings.Contains(textContent.Text, "10.0.0.5") {
+		t.Errorf("text = %q, should not contain internal IP", textContent.Text)
+	}
+	if !strings.Contains(textContent.Text, "search upstream unavailable") {
+		t.Errorf("text = %q, want sanitized transport message", textContent.Text)
+	}
+}
+
+func TestSearchHandler_DecodeError(t *testing.T) {
+	client := &stubClient{
+		err: &synthproxy.DecodeError{Cause: fmt.Errorf("json: cannot unmarshal number into Go string")},
+	}
+
+	handler := newSearchHandler(slog.Default(), client)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "search"
+	req.Params.Arguments = map[string]interface{}{"query": "test"}
+
+	result, err := handler.handle(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handle() error: %v", err)
+	}
+
+	if result.IsError == false {
+		t.Fatal("result should be an error for decode failure")
+	}
+
+	textContent, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("content[0] type = %T, want TextContent", result.Content[0])
+	}
+	if strings.Contains(textContent.Text, "json:") {
+		t.Errorf("text = %q, should not contain internal Go error", textContent.Text)
+	}
+	if !strings.Contains(textContent.Text, "search upstream returned an invalid response") {
+		t.Errorf("text = %q, want sanitized decode message", textContent.Text)
 	}
 }
 
@@ -184,8 +254,6 @@ func TestSSEHandler_SSEEndpointReachable(t *testing.T) {
 
 	client := synthproxy.NewClient(ts.URL, synthproxy.DefaultHTTPClient(5*time.Second))
 
-	// Use a test server so the SSE handler can resolve its own base URL
-	mcpSrv := New(nil, client)
 	testSrv := httptest.NewServer(NewSSEHandler(nil, client, SSEOptions{
 		SSEEndpoint:     "/mcp/sse",
 		MessageEndpoint: "/mcp/messages",
@@ -207,9 +275,6 @@ func TestSSEHandler_SSEEndpointReachable(t *testing.T) {
 	if !strings.Contains(ct, "text/event-stream") {
 		t.Errorf("Content-Type = %q, want text/event-stream", ct)
 	}
-
-	// Read the first event (endpoint advertisement) then close
-	_ = mcpSrv // ensure variable used
 }
 
 func TestSSEHandler_Integration_ToolResult(t *testing.T) {
