@@ -1,4 +1,4 @@
-Status: DRAFT
+Status: COMPLETED
 
 # Plan: GoReleaser binary releases with conventional commits, SHA256 checksums, and minisign signing
 

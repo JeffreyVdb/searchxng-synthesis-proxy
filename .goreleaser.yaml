@@ -73,15 +73,15 @@ checksum:
 signs:
   - artifacts: checksum
     cmd: minisign
-    signature: "{{ .Artifact }}.minisig"
+    signature: "${artifact}.minisig"
     args:
       - "-S"
       - "-s"
       - "{{ .Env.MINISIGN_KEY_FILE }}"
       - "-m"
-      - "{{ .Artifact }}"
+      - "${artifact}"
       - "-x"
-      - "{{ .Signature }}"
+      - "${signature}"
       - "-t"
       - "searchxng-synthesis-proxy {{ .Version }} checksums"
 
