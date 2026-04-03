@@ -1,4 +1,4 @@
-Status: DRAFT
+Status: COMPLETED
 
 # Plan: Fix LLM JSON parsing and add the `searxng-search` OpenClaw skill
 
