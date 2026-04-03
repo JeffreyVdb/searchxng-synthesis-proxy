@@ -142,9 +142,15 @@ go test -race ./...
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — package responsibilities, request lifecycle, tradeoffs
-- [Deployment](docs/DEPLOY.md) — building, running, systemd, smoke tests
+- [Deployment](docs/DEPLOY.md) — building, running, systemd, smoke tests, binary releases and verification
 - [MCP Server](docs/MCP.md) — MCP server usage and client setup (OpenCode, Claude Code, Gemini CLI)
 - [Security](docs/SECURITY.md) — trust boundaries, prompt injection, hardening
+
+## Release Verification
+
+GitHub releases include SHA256 checksums (`checksums.txt`) and a minisign signature (`checksums.txt.minisig`). The public verification key is stored in [`minisign.pub`](minisign.pub).
+
+For full verification instructions including single-file verification, see [**Deployment Guide → Verifying Releases**](docs/DEPLOY.md#verifying-releases).
 
 ## License
 

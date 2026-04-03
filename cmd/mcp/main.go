@@ -19,6 +19,13 @@ import (
 	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/synthproxy"
 )
 
+// Build metadata injected via ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -48,6 +55,8 @@ func run() error {
 	logger.Info("starting MCP server",
 		slog.String("addr", cfg.Addr()),
 		slog.String("upstream", cfg.ProxyBaseURL),
+		slog.String("version", version),
+		slog.String("commit", commit),
 	)
 	serveErrCh := make(chan error, 1)
 	go func() {

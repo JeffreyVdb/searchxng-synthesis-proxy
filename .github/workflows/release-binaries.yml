@@ -1,0 +1,57 @@
+name: Release binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: goreleaser-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and release binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install minisign
+        run: |
+          curl -fsSL https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz \
+            | tar xzf - -C /tmp minisign-linux/x86_64/minisign
+          sudo cp /tmp/minisign-linux/x86_64/minisign /usr/local/bin/minisign
+          sudo chmod 755 /usr/local/bin/minisign
+          minisign -help 2>&1 | head -1 || true
+
+      - name: Materialize minisign private key
+        run: |
+          MINISIGN_KEY_FILE="$(mktemp)"
+          printf '%s' "${{ secrets.MINISIGN_PRIVATE_KEY }}" > "$MINISIGN_KEY_FILE"
+          chmod 600 "$MINISIGN_KEY_FILE"
+          echo "MINISIGN_KEY_FILE=$MINISIGN_KEY_FILE" >> "$GITHUB_ENV"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINISIGN_KEY_FILE: ${{ env.MINISIGN_KEY_FILE }}
+
+      - name: Clean up signing key
+        if: always()
+        run: rm -f "$MINISIGN_KEY_FILE"

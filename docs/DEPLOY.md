@@ -161,6 +161,71 @@ No database migration is needed (stateless service).
 
 ---
 
+## Binary Releases
+
+Tagged releases produce pre-built binaries alongside the container images.
+
+### Cutting a release
+
+1. Ensure all desired changes are merged to `main`.
+2. Create and push a semver tag:
+
+   ```bash
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+3. GitHub Actions runs the GoReleaser binary release workflow automatically.
+4. Release assets appear on the GitHub Releases page.
+
+### Release artifacts
+
+Each release includes:
+
+- `search-synthesis-proxy_vX.Y.Z_linux_amd64.tar.gz` — proxy binary
+- `search-synthesis-proxy_vX.Y.Z_linux_arm64.tar.gz` — proxy binary (ARM)
+- `mcp-server_vX.Y.Z_linux_amd64.tar.gz` — MCP server binary
+- `mcp-server_vX.Y.Z_linux_arm64.tar.gz` — MCP server binary (ARM)
+- `checksums.txt` — SHA256 checksums for all archives
+- `checksums.txt.minisig` — minisign signature of the checksum file
+
+### Verifying a release
+
+Download the assets you need, plus `checksums.txt`, `checksums.txt.minisig`, and `minisign.pub` from the repository.
+
+**1. Verify the minisign signature:**
+
+```bash
+minisign -Vm checksums.txt -p minisign.pub -x checksums.txt.minisig
+```
+
+**2. Verify the SHA256 checksum of an archive:**
+
+To check all assets in the current directory:
+
+```bash
+sha256sum -c checksums.txt
+```
+
+To check a single asset:
+
+```bash
+grep 'search-synthesis-proxy_.*_linux_amd64.tar.gz' checksums.txt | sha256sum -c -
+```
+
+### Public verification key
+
+The minisign public key is stored in `minisign.pub` at the repository root:
+
+```
+untrusted comment: minisign public key F25B682482FBF72B
+RWQr9/uCJGhb8kBVftfmdSa6oAxoNOTcdCn399XX8gMm+qlV/8AESfVz
+```
+
+You can also obtain it directly from the repository rather than the release page.
+
+---
+
 ## MCP SSE Server
 
 The MCP server is a separate binary that exposes the search capability to agent clients over SSE. It calls the main proxy's `/v1/search` API as its upstream.
