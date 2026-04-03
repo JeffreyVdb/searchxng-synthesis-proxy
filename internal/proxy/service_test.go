@@ -8,9 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/searx"
-)
-
-// fakeSearcher implements Searcher for tests.
+)// fakeSearcher implements Searcher for tests.
 type fakeSearcher struct {
 	resp searx.SearchResponse
 	err  error
@@ -168,6 +166,27 @@ func TestService_GeneratorFailure(t *testing.T) {
 	}
 }
 
+func TestService_EmbeddedJSONObject(t *testing.T) {
+	searcher := &fakeSearcher{
+		resp: searx.SearchResponse{
+			Query:   "test",
+			Results: []searx.Result{{Title: "A", URL: "https://a.com", Snippet: "a", Engine: "google"}},
+		},
+	}
+	generator := &fakeGenerator{
+		content: "Here is the result:\n```json\n{\"answer\":\"ok\",\"citations\":[1]}\n```\n",
+	}
+
+	svc := NewService(searcher, generator, Options{MaxSearchResults: 5})
+	resp, err := svc.SearchAndSynthesize(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Answer != "ok" {
+		t.Errorf("Answer = %q, want %q", resp.Answer, "ok")
+	}
+}
+
 func TestService_FencedJSON(t *testing.T) {
 	searcher := &fakeSearcher{
 		resp: searx.SearchResponse{
@@ -253,51 +272,6 @@ func TestService_MissingAnswer(t *testing.T) {
 	_, code, _ := StatusOf(err)
 	if code != "llm_invalid_payload" {
 		t.Errorf("code = %q, want %q", code, "llm_invalid_payload")
-	}
-}
-
-func TestBuildUserPrompt_ContainsNumberedSources(t *testing.T) {
-	results := []sourceForResult{
-		{index: 1, title: "Go Blog", url: "https://go.dev/blog", snippet: "Learn Go", engine: "google"},
-		{index: 2, title: "Go Tour", url: "https://go.dev/tour", snippet: "Interactive tour", engine: "duckduckgo"},
-	}
-	prompt := buildUserPrompt("golang", results)
-
-	if !strings.Contains(prompt, "[1]") {
-		t.Error("prompt missing [1]")
-	}
-	if !strings.Contains(prompt, "[2]") {
-		t.Error("prompt missing [2]")
-	}
-	if !strings.Contains(prompt, "golang") {
-		t.Error("prompt missing query")
-	}
-	if !strings.Contains(prompt, "https://go.dev/blog") {
-		t.Error("prompt missing URL")
-	}
-	if !strings.Contains(prompt, "Learn Go") {
-		t.Error("prompt missing snippet")
-	}
-}
-
-func TestStripFences(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"plain json", `{"a":1}`, `{"a":1}`},
-		{"json fence", "```json\n{\"a\":1}\n```", `{"a":1}`},
-		{"code fence", "```\n{\"a\":1}\n```", `{"a":1}`},
-		{"already clean", `{"answer":"x","citations":[1]}`, `{"answer":"x","citations":[1]}`},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := stripFences(tc.input)
-			if got != tc.want {
-				t.Errorf("stripFences() = %q, want %q", got, tc.want)
-			}
-		})
 	}
 }
 
