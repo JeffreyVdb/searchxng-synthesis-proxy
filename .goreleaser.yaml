@@ -45,11 +45,7 @@ archives:
   - id: proxy-archive
     ids:
       - proxy
-    name_template: >-
-      search-synthesis-proxy_
-      {{ .Version }}_
-      {{ .Os }}_
-      {{ .Arch }}
+    name_template: "search-synthesis-proxy_{{ .Version }}_{{ .Os }}.{{ .Arch }}"
     format: tar.gz
     files:
       - none*
@@ -57,11 +53,7 @@ archives:
   - id: mcp-archive
     ids:
       - mcp
-    name_template: >-
-      mcp-server_
-      {{ .Version }}_
-      {{ .Os }}_
-      {{ .Arch }}
+    name_template: "mcp-server_{{ .Version }}_{{ .Os }}.{{ .Arch }}"
     format: tar.gz
     files:
       - none*
