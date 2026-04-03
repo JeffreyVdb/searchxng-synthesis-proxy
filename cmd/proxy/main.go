@@ -1,13 +1,6 @@
 // Package main is the entry point for the search synthesis proxy server.
 package main
 
-// Build metadata injected via ldflags.
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-)
-
 import (
 	"context"
 	"fmt"
@@ -22,6 +15,13 @@ import (
 	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/llm"
 	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/proxy"
 	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/searx"
+)
+
+// Build metadata injected via ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {

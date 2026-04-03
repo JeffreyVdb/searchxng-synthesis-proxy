@@ -148,14 +148,9 @@ go test -race ./...
 
 ## Release Verification
 
-GitHub releases include SHA256 checksums (`checksums.txt`) and a minisign signature (`checksums.txt.minisig`). To verify:
+GitHub releases include SHA256 checksums (`checksums.txt`) and a minisign signature (`checksums.txt.minisig`). The public verification key is stored in [`minisign.pub`](minisign.pub).
 
-```bash
-minisign -Vm checksums.txt -p minisign.pub -x checksums.txt.minisig
-sha256sum -c checksums.txt
-```
-
-The public verification key is stored in [`minisign.pub`](minisign.pub). See [DEPLOY.md](docs/DEPLOY.md) for full instructions.
+For full verification instructions including single-file verification, see [**Deployment Guide → Verifying Releases**](docs/DEPLOY.md#verifying-releases).
 
 ## License
 

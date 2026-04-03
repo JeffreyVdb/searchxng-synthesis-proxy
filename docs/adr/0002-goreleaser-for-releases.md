@@ -45,7 +45,7 @@ A dedicated CI signing keypair is used with a passwordless secret key, stored as
 
 ### Trigger
 
-Both the container release workflow and the binary release workflow trigger on `v*` tag pushes. This is expected and desirable — one tag produces both a container image and binary release assets.
+The container release workflow (`release.yml`) triggers on `v*.*.*` tag pushes, while the binary release workflow (`release-binaries.yml`) triggers on `v*` tag pushes. Both fire for typical semver release tags (e.g. `v1.2.3`), producing a container image and binary release assets from the same tag. The broader `v*` pattern on the binary workflow allows for pre-release or non-semver tags if needed in the future.
 
 ## Consequences
 

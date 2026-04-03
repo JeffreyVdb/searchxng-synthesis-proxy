@@ -2,9 +2,11 @@ version: 2
 
 project_name: searchxng-synthesis-proxy
 
-before:
-  hooks:
-    - go mod tidy
+# before:
+#   hooks:
+#     Module hygiene (go mod tidy, go vet) is enforced in CI, not during
+#     tagged releases. Release builds should be deterministic against the
+#     exact tagged commit.
 
 builds:
   - id: proxy
@@ -41,7 +43,7 @@ builds:
 
 archives:
   - id: proxy-archive
-    builds:
+    ids:
       - proxy
     name_template: >-
       search-synthesis-proxy_
@@ -53,7 +55,7 @@ archives:
       - none*
 
   - id: mcp-archive
-    builds:
+    ids:
       - mcp
     name_template: >-
       mcp-server_

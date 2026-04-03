@@ -5,13 +5,6 @@
 // proxy's /v1/search API as its upstream.
 package main
 
-// Build metadata injected via ldflags.
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-)
-
 import (
 	"context"
 	"fmt"
@@ -24,6 +17,13 @@ import (
 	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/config"
 	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/mcpserver"
 	"github.com/JeffreyVdb/searchxng-synthesis-proxy/internal/synthproxy"
+)
+
+// Build metadata injected via ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
