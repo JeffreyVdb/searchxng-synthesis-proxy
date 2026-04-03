@@ -1,8 +1,14 @@
 # Deployment Guide
 
-## Prerequisites
+This guide covers deploying both the **main search synthesis proxy** and the **MCP SSE server**.
 
-- Go 1.24+ (for building from source)
+---
+
+## Main Proxy
+
+### Prerequisites
+
+- Go 1.26+ (for building from source)
 - A reachable SearXNG instance
 - An API key for an OpenAI-compatible provider (e.g., OpenRouter)
 
@@ -47,14 +53,14 @@ SEARCH_TIMEOUT=10s
 LLM_TIMEOUT=45s
 ```
 
-## Building from Source
+### Building from Source
 
 ```bash
 git clone <repo-url> && cd search-synthesis-proxy
 go build -o search-synthesis-proxy ./cmd/proxy
 ```
 
-## Running Locally
+### Running Locally
 
 ```bash
 # Set required env
@@ -70,7 +76,7 @@ Or with the compiled binary:
 ./search-synthesis-proxy
 ```
 
-## systemd Service
+### systemd Service
 
 Create `/etc/systemd/system/search-synthesis-proxy.service`:
 
@@ -108,14 +114,14 @@ sudo systemctl enable search-synthesis-proxy
 sudo systemctl start search-synthesis-proxy
 ```
 
-## Health Check
+### Health Check
 
 ```bash
 curl http://127.0.0.1:8080/healthz
 # Expected: {"status":"ok"}
 ```
 
-## Smoke Test
+### Smoke Test
 
 ```bash
 curl -s 'http://127.0.0.1:8080/v1/search?q=golang+context' | jq .
@@ -144,7 +150,7 @@ Expected response:
 }
 ```
 
-## Upgrade Notes
+### Upgrade Notes
 
 1. Build the new binary
 2. Test with `./search-synthesis-proxy` in a separate port if needed
@@ -152,3 +158,154 @@ Expected response:
 4. Verify with `curl http://127.0.0.1:8080/healthz`
 
 No database migration is needed (stateless service).
+
+---
+
+## MCP SSE Server
+
+The MCP server is a separate binary that exposes the search capability to agent clients over SSE. It calls the main proxy's `/v1/search` API as its upstream.
+
+### Prerequisites
+
+- A running instance of the main search synthesis proxy
+- Network access from the MCP server to the main proxy
+
+### Environment Variables
+
+#### Required
+
+| Variable | Purpose |
+|---|---|
+| `MCP_PROXY_BASE_URL` | Base URL of the main proxy (e.g. `http://127.0.0.1:8080`) |
+
+#### Optional (with defaults)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MCP_PORT` | `8090` | HTTP listen port |
+| `MCP_REQUEST_TIMEOUT` | `30s` | Timeout for calls to the main proxy |
+| `MCP_SERVER_READ_TIMEOUT` | `10s` | HTTP server read timeout |
+| `MCP_SERVER_WRITE_TIMEOUT` | `0s` | HTTP server write timeout (0 = no timeout, required for SSE) |
+| `MCP_SERVER_IDLE_TIMEOUT` | `60s` | HTTP server idle timeout |
+| `MCP_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown deadline |
+
+### Building
+
+```bash
+go build -o mcp-server ./cmd/mcp
+```
+
+### Sample Environment File
+
+Create `/etc/mcp-server.env`:
+
+```bash
+MCP_PROXY_BASE_URL=http://127.0.0.1:8080
+MCP_PORT=8090
+MCP_REQUEST_TIMEOUT=30s
+```
+
+### systemd Service
+
+Create `/etc/systemd/system/mcp-server.service`:
+
+```ini
+[Unit]
+Description=MCP SSE Server for Search Synthesis
+After=network-online.target search-synthesis-proxy.service
+Wants=network-online.target
+Requires=search-synthesis-proxy.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/search-synthesis-proxy
+EnvironmentFile=/etc/mcp-server.env
+ExecStart=/opt/search-synthesis-proxy/mcp-server
+Restart=on-failure
+RestartSec=3
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/search-synthesis-proxy
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable mcp-server
+sudo systemctl start mcp-server
+```
+
+### Health Check
+
+```bash
+curl http://127.0.0.1:8090/healthz
+# Expected: {"status":"ok"}
+```
+
+### Endpoints
+
+| Method | Path | Purpose |
+|--------|------|--------|
+| GET | `/mcp/sse` | SSE connection endpoint |
+| POST | `/mcp/messages` | JSON-RPC message endpoint |
+| GET | `/healthz` | Health check |
+
+### Reverse Proxy Considerations
+
+When placing the MCP server behind a reverse proxy (nginx, Caddy, etc.), SSE requires special attention:
+
+1. **Disable proxy buffering** — SSE events must be forwarded immediately, not buffered.
+2. **Allow long-lived connections** — SSE connections stay open; do not impose short timeouts.
+3. **Set appropriate headers** — ensure `Connection: keep-alive` is passed through.
+
+#### nginx Example
+
+```nginx
+location /mcp/ {
+    proxy_pass http://127.0.0.1:8090;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 86400s;
+}
+
+location /healthz {
+    proxy_pass http://127.0.0.1:8090;
+}
+```
+
+#### Caddy Example
+
+```
+synth.example.com {
+    handle /mcp/* {
+        reverse_proxy localhost:8090 {
+            flush_interval -1
+        }
+    }
+    handle /healthz {
+        reverse_proxy localhost:8090
+    }
+}
+```
+
+### Co-located Deployment
+
+When the MCP server and main proxy run on the same host, prefer direct local networking:
+
+```bash
+MCP_PROXY_BASE_URL=http://127.0.0.1:8080
+```
+
+This avoids unnecessary network hops and keeps latency minimal.

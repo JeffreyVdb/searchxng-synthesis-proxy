@@ -39,7 +39,16 @@ func (c Config) Addr() string {
 }
 
 // Load reads environment variables and returns a validated Config.
+//
+// Deprecated: Use LoadProxy() for clarity now that a second binary exists.
+// Load is kept for backward compatibility with cmd/proxy.
 func Load() (Config, error) {
+	return LoadProxy()
+}
+
+// LoadProxy reads environment variables and returns a validated Config for the
+// main search synthesis proxy service.
+func LoadProxy() (Config, error) {
 	var cfg Config
 	var errs []string
 
