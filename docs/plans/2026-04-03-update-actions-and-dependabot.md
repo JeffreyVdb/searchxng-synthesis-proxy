@@ -36,13 +36,13 @@ Create a Dependabot config with two update entries:
 
 1. `github-actions`
    - directory: `/`
-   - schedule: every 2 weeks via cron
+   - schedule: weekly (Monday), with grouping limiting to one open PR per ecosystem
    - group all action updates into one PR
    - `open-pull-requests-limit: 1`
 
 2. `gomod`
    - directory: `/`
-   - schedule: every 2 weeks via cron
+   - schedule: weekly (Monday), with grouping limiting to one open PR per ecosystem
    - group all Go module updates into one PR
    - `open-pull-requests-limit: 1`
 
@@ -54,9 +54,8 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "cron"
-      cronjob: "0 6 */14 * *"
-      timezone: "UTC"
+      interval: "weekly"
+      day: "monday"
     open-pull-requests-limit: 1
     groups:
       github-actions:
@@ -66,9 +65,8 @@ updates:
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
-      interval: "cron"
-      cronjob: "0 7 8-31/14 * *"
-      timezone: "UTC"
+      interval: "weekly"
+      day: "monday"
     open-pull-requests-limit: 1
     groups:
       gomod:
@@ -76,7 +74,7 @@ updates:
           - "*"
 ```
 
-This keeps one grouped PR per ecosystem and staggers the two ecosystems so they do not open on the same run.
+This keeps one grouped PR per ecosystem. Dependabot checks weekly on Monday, but with `open-pull-requests-limit: 1` and grouping, at most one PR per ecosystem stays open at a time.
 
 ## Validation
 
@@ -90,4 +88,4 @@ This keeps one grouped PR per ecosystem and staggers the two ecosystems so they 
 - `.github/dependabot.yml` exists.
 - GitHub Actions updates arrive as one grouped PR.
 - Go module updates arrive as one grouped PR.
-- Dependabot runs on a biweekly cadence per ecosystem.
+- Dependabot runs on a weekly cadence (Monday) per ecosystem, with grouping limiting to one open PR per ecosystem.
