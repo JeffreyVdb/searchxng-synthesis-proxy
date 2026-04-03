@@ -1,6 +1,13 @@
 // Package main is the entry point for the search synthesis proxy server.
 package main
 
+// Build metadata injected via ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 import (
 	"context"
 	"fmt"
@@ -43,7 +50,11 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	logger.Info("starting server", slog.String("addr", cfg.Addr()))
+	logger.Info("starting server",
+		slog.String("addr", cfg.Addr()),
+		slog.String("version", version),
+		slog.String("commit", commit),
+	)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("server error", slog.String("error", err.Error()))

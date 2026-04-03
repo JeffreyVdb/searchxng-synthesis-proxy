@@ -1,0 +1,123 @@
+version: 2
+
+project_name: searchxng-synthesis-proxy
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: proxy
+    main: ./cmd/proxy
+    binary: search-synthesis-proxy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+
+  - id: mcp
+    main: ./cmd/mcp
+    binary: mcp-server
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+
+archives:
+  - id: proxy-archive
+    builds:
+      - proxy
+    name_template: >-
+      search-synthesis-proxy_
+      {{ .Version }}_
+      {{ .Os }}_
+      {{ .Arch }}
+    format: tar.gz
+    files:
+      - none*
+
+  - id: mcp-archive
+    builds:
+      - mcp
+    name_template: >-
+      mcp-server_
+      {{ .Version }}_
+      {{ .Os }}_
+      {{ .Arch }}
+    format: tar.gz
+    files:
+      - none*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+signs:
+  - artifacts: checksum
+    cmd: minisign
+    signature: "{{ .Artifact }}.minisig"
+    args:
+      - "-S"
+      - "-s"
+      - "{{ .Env.MINISIGN_KEY_FILE }}"
+      - "-m"
+      - "{{ .Artifact }}"
+      - "-x"
+      - "{{ .Signature }}"
+      - "-t"
+      - "searchxng-synthesis-proxy {{ .Version }} checksums"
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^chore\\(release\\):"
+      - "^chore\\(deps\\):"
+      - "^merge "
+      - "^Merge "
+  groups:
+    - title: ⚠️ Breaking Changes
+      regexp: "^.*?!:"
+      order: 0
+    - title: ✨ Features
+      regexp: "^.*?feat(\\([[:word:]-]+\\))?!?:"
+      order: 1
+    - title: 🐛 Bug Fixes
+      regexp: "^.*?fix(\\([[:word:]-]+\\))?!?:"
+      order: 2
+    - title: 📚 Documentation
+      regexp: "^.*?docs(\\([[:word:]-]+\\))?!?:"
+      order: 3
+    - title: ♻️ Refactors
+      regexp: "^.*?refactor(\\([[:word:]-]+\\))?!?:"
+      order: 4
+    - title: 🔧 Chore, CI, and Tests
+      regexp: "^.*?(chore|ci|build|test)(\\([[:word:]-]+\\))?!?:"
+      order: 5
+    - title: 📦 Other
+      order: 999
+
+release:
+  github:
+    owner: JeffreyVdb
+    name: searchxng-synthesis-proxy
+  draft: false
+  prerelease: auto
+  mode: replace

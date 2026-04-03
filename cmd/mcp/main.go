@@ -5,6 +5,13 @@
 // proxy's /v1/search API as its upstream.
 package main
 
+// Build metadata injected via ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 import (
 	"context"
 	"fmt"
@@ -48,6 +55,8 @@ func run() error {
 	logger.Info("starting MCP server",
 		slog.String("addr", cfg.Addr()),
 		slog.String("upstream", cfg.ProxyBaseURL),
+		slog.String("version", version),
+		slog.String("commit", commit),
 	)
 	serveErrCh := make(chan error, 1)
 	go func() {
