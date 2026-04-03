@@ -1,6 +1,6 @@
 module github.com/JeffreyVdb/searchxng-synthesis-proxy
 
-go 1.24
+go 1.26
 
 require github.com/openai/openai-go/v3 v3.30.0
 
