@@ -25,7 +25,7 @@ The existing workflow at `.github/workflows/ci-cd.yml` currently does all of the
   - `latest` on `main` pushes
   - `{{version}}` on tag pushes
 
-That means a clean release tag can publish `latest`, but any later push to `main` can immediately replace it.
+That means `latest` tracks ordinary pushes to `main`, while release tags publish only the versioned image. As a result, `latest` is not a reliable release tag today.
 
 ## Recommendation
 
