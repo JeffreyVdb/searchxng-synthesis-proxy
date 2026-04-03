@@ -37,8 +37,7 @@ type Meta struct {
 }
 
 // Error represents an upstream error returned by the proxy.
-// The Message field contains the upstream error text; use PublicMessage for
-// safe display to external callers.
+// The Message field contains the upstream error text.
 // Use UserMessage() to get a sanitized message safe for external callers.
 // The underlying details are kept for logging only.
 type Error struct {

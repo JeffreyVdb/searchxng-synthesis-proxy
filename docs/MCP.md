@@ -62,7 +62,7 @@ Human-readable text containing the synthesized answer followed by numbered sourc
 ### Prerequisites
 
 - A running instance of the main search synthesis proxy
-- Go 1.24+ (if building from source)
+- Go 1.26+ (if building from source)
 
 ### Build
 
@@ -97,7 +97,7 @@ curl -N http://127.0.0.1:8090/mcp/sse
 
 ### OpenCode
 
-Add a remote MCP server in your OpenCode configuration file (typically `~/.config/opencode/config.json` or the project-level `.opencode.json`):
+Add a remote MCP server in your OpenCode configuration file (typically `~/.config/opencode/opencode.json` or the project-level `opencode.json`):
 
 ```json
 {

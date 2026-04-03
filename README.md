@@ -95,7 +95,7 @@ GET /healthz
 ## Running Locally
 
 ```bash
-# Prerequisites: Go 1.24+, running SearXNG instance, LLM API key
+# Prerequisites: Go 1.26+, running SearXNG instance, LLM API key
 
 export LLM_API_KEY=your-key
 go run ./cmd/proxy

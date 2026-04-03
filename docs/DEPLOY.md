@@ -8,7 +8,7 @@ This guide covers deploying both the **main search synthesis proxy** and the **M
 
 ### Prerequisites
 
-- Go 1.24+ (for building from source)
+- Go 1.26+ (for building from source)
 - A reachable SearXNG instance
 - An API key for an OpenAI-compatible provider (e.g., OpenRouter)
 
