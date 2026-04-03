@@ -210,7 +210,7 @@ sha256sum -c checksums.txt
 To check a single asset:
 
 ```bash
-grep 'search-synthesis-proxy_.*_linux_amd64.tar.gz' checksums.txt | sha256sum -c -
+grep 'search-synthesis-proxy_.*_linux.amd64.tar.gz' checksums.txt | sha256sum -c -
 ```
 
 ### Public verification key
