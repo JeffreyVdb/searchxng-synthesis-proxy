@@ -8,7 +8,7 @@ A small, stateless Go service that takes a search query, fetches results from Se
 - **LLM synthesis** — uses an OpenAI-compatible chat completions API (default: OpenRouter with `xiaomi/mimo-v2-flash`)
 - **Cited sources** — the model cites specific sources, which are validated and returned in the response
 - **JSON-only API** — clean, machine-readable responses with stable error codes
-- **MCP server** — separate SSE-based MCP server for agent clients (OpenCode, Claude Code, Gemini CLI)
+- **MCP server** — separate remote MCP server exposing the same tool surface over StreamableHTTP (`/mcp`) and SSE compatibility endpoints (`/mcp/sse`, `/mcp/messages`)
 - **Standard library HTTP** — no web frameworks, just `net/http` with method-based routing
 - **Configurable** — all settings via environment variables with sensible defaults
 - **Tested** — unit tests for all internal packages using table-driven tests and `httptest`
@@ -97,7 +97,7 @@ GET /healthz
 ```bash
 # Prerequisites: Go 1.26+, running SearXNG instance, LLM API key
 
-export LLM_API_KEY=your-key
+export LLM_API_KEY=***
 go run ./cmd/proxy
 
 # Test it
@@ -120,19 +120,19 @@ go test -race ./...
 .
 ├── cmd/
 │   ├── proxy/           # Main proxy entrypoint and server lifecycle
-│   └── mcp/             # MCP SSE server entrypoint
+│   └── mcp/             # MCP entrypoint exposing StreamableHTTP and SSE transports
 ├── internal/
 │   ├── api/             # HTTP handlers and routing
 │   ├── config/          # Environment variable loading and validation
 │   ├── llm/             # OpenAI-compatible LLM client adapter
-│   ├── mcpserver/       # MCP server construction, tools, and SSE transport
+│   ├── mcpserver/       # Shared MCP tool registration and HTTP transport wiring
 │   ├── proxy/           # Orchestration, prompts, and business logic
 │   ├── searx/           # SearXNG client adapter
-│   └── synthproxy/      # Upstream proxy HTTP client for the MCP server
+│   └── synthproxy/      # HTTP client for the MCP server's upstream /v1/search contract
 ├── docs/
 │   ├── ARCHITECTURE.md  # Architecture overview with diagrams
 │   ├── DEPLOY.md        # Deployment guide
-│   ├── MCP.md           # MCP server usage and client setup
+│   ├── MCP.md           # MCP transports, endpoints, and client setup
 │   ├── SECURITY.md      # Security considerations
 │   └── adr/             # Architecture Decision Records
 ├── go.mod
@@ -141,9 +141,9 @@ go test -race ./...
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — package responsibilities, request lifecycle, tradeoffs
+- [Architecture](docs/ARCHITECTURE.md) — package responsibilities, request lifecycle, MCP transport layout, tradeoffs
 - [Deployment](docs/DEPLOY.md) — building, running, systemd, smoke tests, binary releases and verification
-- [MCP Server](docs/MCP.md) — MCP server usage and client setup (OpenCode, Claude Code, Gemini CLI)
+- [MCP Server](docs/MCP.md) — authoritative MCP transport guide for StreamableHTTP and SSE compatibility clients
 - [Security](docs/SECURITY.md) — trust boundaries, prompt injection, hardening
 
 ## Release Verification

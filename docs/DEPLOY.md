@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide covers deploying both the **main search synthesis proxy** and the **MCP SSE server**.
+This guide covers deploying both the **main search synthesis proxy** and the **MCP server**.
 
 ---
 
@@ -182,10 +182,10 @@ Tagged releases produce pre-built binaries alongside the container images.
 
 Each release includes:
 
-- `search-synthesis-proxy_vX.Y.Z_linux_amd64.tar.gz` — proxy binary
-- `search-synthesis-proxy_vX.Y.Z_linux_arm64.tar.gz` — proxy binary (ARM)
-- `mcp-server_vX.Y.Z_linux_amd64.tar.gz` — MCP server binary
-- `mcp-server_vX.Y.Z_linux_arm64.tar.gz` — MCP server binary (ARM)
+- `search-synthesis-proxy_vX.Y.Z_linux.amd64.tar.gz` — proxy binary
+- `search-synthesis-proxy_vX.Y.Z_linux.arm64.tar.gz` — proxy binary (ARM)
+- `mcp-server_vX.Y.Z_linux.amd64.tar.gz` — MCP server binary
+- `mcp-server_vX.Y.Z_linux.arm64.tar.gz` — MCP server binary (ARM)
 - `checksums.txt` — SHA256 checksums for all archives
 - `checksums.txt.minisig` — minisign signature of the checksum file
 
@@ -226,9 +226,9 @@ You can also obtain it directly from the repository rather than the release page
 
 ---
 
-## MCP SSE Server
+## MCP Server
 
-The MCP server is a separate binary that exposes the search capability to agent clients over SSE. It calls the main proxy's `/v1/search` API as its upstream.
+The MCP server is a separate binary that exposes the search capability to agent clients over two transports: preferred StreamableHTTP at `/mcp` and SSE compatibility endpoints at `/mcp/sse` plus `/mcp/messages`. It calls the main proxy's `/v1/search` API as its upstream.
 
 ### Prerequisites
 
@@ -250,7 +250,7 @@ The MCP server is a separate binary that exposes the search capability to agent 
 | `MCP_PORT` | `8090` | HTTP listen port |
 | `MCP_REQUEST_TIMEOUT` | `30s` | Timeout for calls to the main proxy |
 | `MCP_SERVER_READ_TIMEOUT` | `10s` | HTTP server read timeout |
-| `MCP_SERVER_WRITE_TIMEOUT` | `0s` | HTTP server write timeout (0 = no timeout, required for SSE) |
+| `MCP_SERVER_WRITE_TIMEOUT` | `0s` | HTTP server write timeout (0 = no timeout, keeps long-lived streams healthy, including SSE compatibility connections) |
 | `MCP_SERVER_IDLE_TIMEOUT` | `60s` | HTTP server idle timeout |
 | `MCP_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown deadline |
 
@@ -276,7 +276,7 @@ Create `/etc/systemd/system/mcp-server.service`:
 
 ```ini
 [Unit]
-Description=MCP SSE Server for Search Synthesis
+Description=MCP Server for Search Synthesis
 After=network-online.target search-synthesis-proxy.service
 Wants=network-online.target
 Requires=search-synthesis-proxy.service
@@ -320,29 +320,36 @@ curl http://127.0.0.1:8090/healthz
 
 | Method | Path | Purpose |
 |--------|------|--------|
+| GET | `/mcp` | StreamableHTTP listener / stream negotiation |
+| POST | `/mcp` | StreamableHTTP JSON-RPC endpoint |
+| DELETE | `/mcp` | StreamableHTTP session termination |
 | GET | `/mcp/sse` | SSE connection endpoint |
-| POST | `/mcp/messages` | JSON-RPC message endpoint |
+| POST | `/mcp/messages` | SSE JSON-RPC message endpoint |
 | GET | `/healthz` | Health check |
 
 ### Reverse Proxy Considerations
 
-When placing the MCP server behind a reverse proxy (nginx, Caddy, etc.), SSE requires special attention:
+When placing the MCP server behind a reverse proxy (nginx, Caddy, etc.), both transports should be forwarded, and SSE still requires special attention:
 
 1. **Disable proxy buffering** — SSE events must be forwarded immediately, not buffered.
 2. **Allow long-lived connections** — SSE connections stay open; do not impose short timeouts.
-3. **Set appropriate headers** — ensure `Connection: keep-alive` is passed through.
+3. **Set appropriate headers** — ensure long-lived connections are not broken by proxy defaults.
 
 #### nginx Example
 
 ```nginx
-location /mcp/ {
+location ^~ /mcp {
     proxy_pass http://127.0.0.1:8090;
     proxy_http_version 1.1;
-    proxy_set_header Connection "";
     proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Required for SSE and streaming responses
     proxy_buffering off;
     proxy_cache off;
-    proxy_read_timeout 86400s;
+    chunked_transfer_encoding off;
+    proxy_read_timeout 3600s;
 }
 
 location /healthz {
@@ -354,7 +361,7 @@ location /healthz {
 
 ```
 synth.example.com {
-    handle /mcp/* {
+    handle /mcp* {
         reverse_proxy localhost:8090 {
             flush_interval -1
         }

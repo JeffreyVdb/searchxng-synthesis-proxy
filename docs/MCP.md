@@ -1,103 +1,136 @@
 # MCP Server
 
-The search synthesis proxy ships an MCP (Model Context Protocol) server that exposes the search capability as a remote tool over Server-Sent Events (SSE).
+This is the authoritative transport guide for the MCP server shipped with the search synthesis proxy.
 
-## Architecture
+The MCP server is a separate binary (`cmd/mcp/`) that exposes one shared `search` tool surface through two HTTP transports:
 
-The MCP server is a **separate binary** (`cmd/mcp/`) that acts as a transport adapter. It does not handle search or LLM synthesis itself — instead, it calls the main proxy's `/v1/search` API and formats the results for MCP clients.
+- StreamableHTTP at `/mcp` — modern and preferred, especially for Hermes native MCP
+- SSE compatibility endpoints at `/mcp/sse` and `/mcp/messages` — retained for clients that still expect SSE
+
+The MCP server does not perform search or synthesis itself. It calls the main proxy's `/v1/search` API and reformats the result for MCP clients.
+
+## Transport layout
 
 ```
-Agent Client  ──SSE──►  MCP Server (cmd/mcp)  ──HTTP──►  Main Proxy (cmd/proxy)
-                                                       ├──► SearXNG
-                                                       └──► LLM
+Agent Client  ──StreamableHTTP or SSE──►  MCP Server (cmd/mcp)  ──HTTP──►  Main Proxy (cmd/proxy)
+                                                                          ├──► SearXNG
+                                                                          └──► LLM
 ```
 
-## Exposed Tool
+## Exposed tool
 
 ### `search`
 
 Search the web through the synthesis proxy and return a synthesized answer with cited sources.
 
-**Input:**
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `query` | string | yes | Search query text |
 
-| Parameter | Type   | Required | Description         |
-|-----------|--------|----------|---------------------|
-| `query`   | string | yes      | The search query    |
-
-**Output:**
-
-Human-readable text containing the synthesized answer followed by numbered sources with titles, URLs, and snippets. Structured content is also attached for clients that support it.
+The tool returns human-readable text with the synthesized answer followed by numbered sources. Structured content is also attached for clients that support it.
 
 ## Endpoints
 
-| Method | Path             | Purpose              |
-|--------|------------------|----------------------|
-| GET    | `/mcp/sse`       | SSE connection       |
-| POST   | `/mcp/messages`  | JSON-RPC messages    |
-| GET    | `/healthz`       | Health check         |
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/mcp` | StreamableHTTP listener / stream negotiation |
+| POST | `/mcp` | StreamableHTTP JSON-RPC requests |
+| DELETE | `/mcp` | StreamableHTTP session termination |
+| GET | `/mcp/sse` | SSE connection endpoint |
+| POST | `/mcp/messages` | SSE JSON-RPC message endpoint |
+| GET | `/healthz` | Health check |
 
-## Environment Variables
+## Environment variables
 
 ### Required
 
-| Variable             | Purpose                                  |
-|----------------------|------------------------------------------|
-| `MCP_PROXY_BASE_URL` | Base URL of the main proxy (e.g. `http://127.0.0.1:8080`) |
+| Variable | Purpose |
+|---|---|
+| `MCP_PROXY_BASE_URL` | Base URL of the main proxy, for example `http://127.0.0.1:8080` |
 
-### Optional (with defaults)
+### Optional
 
-| Variable                  | Default | Purpose                          |
-|---------------------------|---------|----------------------------------|
-| `MCP_PORT`                | `8090`  | HTTP listen port                 |
-| `MCP_REQUEST_TIMEOUT`     | `30s`   | Timeout for calls to the proxy   |
-| `MCP_SERVER_READ_TIMEOUT` | `10s`   | HTTP server read timeout         |
-| `MCP_SERVER_WRITE_TIMEOUT`| `0s`    | HTTP server write timeout (0 = no timeout for SSE) |
-| `MCP_SERVER_IDLE_TIMEOUT` | `60s`   | HTTP server idle timeout         |
-| `MCP_SHUTDOWN_TIMEOUT`    | `10s`   | Graceful shutdown deadline       |
+| Variable | Default | Purpose |
+|---|---|---|
+| `MCP_PORT` | `8090` | HTTP listen port |
+| `MCP_REQUEST_TIMEOUT` | `30s` | Timeout for calls to the main proxy |
+| `MCP_SERVER_READ_TIMEOUT` | `10s` | HTTP server read timeout |
+| `MCP_SERVER_WRITE_TIMEOUT` | `0s` | HTTP server write timeout. `0s` avoids breaking long-lived streams, including SSE compatibility connections. |
+| `MCP_SERVER_IDLE_TIMEOUT` | `60s` | HTTP server idle timeout |
+| `MCP_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown deadline |
 
-> **Note:** `MCP_SERVER_WRITE_TIMEOUT` defaults to 0 (no timeout) to keep SSE connections alive. Do not set a short write timeout — it will break long-lived event streams.
-
-## Running Locally
-
-### Prerequisites
-
-- A running instance of the main search synthesis proxy
-- Go 1.26+ (if building from source)
-
-### Build
+## Running locally
 
 ```bash
 go build -o mcp-server ./cmd/mcp
-```
 
-### Run
-
-```bash
 export MCP_PROXY_BASE_URL=http://127.0.0.1:8080
 ./mcp-server
 ```
 
-Or with `go run`:
+Or:
 
 ```bash
 MCP_PROXY_BASE_URL=http://127.0.0.1:8080 go run ./cmd/mcp
 ```
 
-### Smoke Test
+## Smoke tests
 
 ```bash
 # Health check
 curl http://127.0.0.1:8090/healthz
 
-# SSE endpoint should respond with text/event-stream
+# Preferred StreamableHTTP endpoint should answer on /mcp
+curl -i -H 'Accept: text/event-stream' http://127.0.0.1:8090/mcp
+
+# Compatibility SSE endpoint should stay reachable
 curl -N http://127.0.0.1:8090/mcp/sse
 ```
 
-## Agent Client Configuration
+A slightly deeper StreamableHTTP initialize smoke test:
+
+```bash
+curl -i \
+  -X POST http://127.0.0.1:8090/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-03-26",
+      "capabilities": {},
+      "clientInfo": {"name": "smoke-test", "version": "1.0.0"}
+    }
+  }'
+```
+
+## Preferred client configuration: Hermes native MCP
+
+Use the StreamableHTTP endpoint at `/mcp`.
+
+Local example:
+
+```yaml
+mcp_servers:
+  search:
+    url: "http://127.0.0.1:8090/mcp"
+```
+
+Remote example:
+
+```yaml
+mcp_servers:
+  search:
+    url: "https://search.vandenborne.co/mcp"
+```
+
+## SSE compatibility examples
+
+These examples are for clients that still expect SSE endpoints. Prefer `/mcp` when your client supports StreamableHTTP.
 
 ### OpenCode
-
-Add a remote MCP server in your OpenCode configuration file (typically `~/.config/opencode/opencode.json` or the project-level `opencode.json`):
 
 ```json
 {
@@ -112,7 +145,7 @@ Add a remote MCP server in your OpenCode configuration file (typically `~/.confi
 }
 ```
 
-For a remotely deployed server, replace the URL accordingly:
+Remote SSE example:
 
 ```json
 {
@@ -120,7 +153,7 @@ For a remotely deployed server, replace the URL accordingly:
   "mcp": {
     "search": {
       "type": "remote",
-      "url": "https://synth.example.com/mcp/sse",
+      "url": "https://search.vandenborne.co/mcp/sse",
       "enabled": true
     }
   }
@@ -129,13 +162,9 @@ For a remotely deployed server, replace the URL accordingly:
 
 ### Claude Code
 
-Use the CLI to register the MCP server:
-
 ```bash
 claude mcp add search --transport sse http://127.0.0.1:8090/mcp/sse
 ```
-
-Or add it to your Claude Code settings file (`~/.claude/settings.json`):
 
 ```json
 {
@@ -150,8 +179,6 @@ Or add it to your Claude Code settings file (`~/.claude/settings.json`):
 
 ### Gemini CLI
 
-Add the MCP server to your Gemini CLI settings (`~/.gemini/settings.json`):
-
 ```json
 {
   "mcpServers": {
@@ -162,6 +189,8 @@ Add the MCP server to your Gemini CLI settings (`~/.gemini/settings.json`):
 }
 ```
 
-## Deployment
+## Notes
 
-See [DEPLOY.md](DEPLOY.md) for full deployment instructions including systemd units, reverse proxy configuration, and SSE-specific considerations.
+- `/mcp` and `/mcp/sse` expose the same underlying tool surface.
+- `/healthz` remains the simple server health endpoint.
+- See [DEPLOY.md](DEPLOY.md) for deployment details such as systemd units and reverse proxy configuration.

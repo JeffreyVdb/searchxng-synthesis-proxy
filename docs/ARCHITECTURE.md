@@ -4,6 +4,8 @@
 
 The Search Synthesis Proxy is a small, stateless Go service that takes a user query, searches the web via SearXNG, feeds the results to an LLM (via OpenRouter or any OpenAI-compatible API), and returns a synthesized answer with cited sources as JSON.
 
+A companion MCP binary exposes that same search capability as a remote tool. One shared MCP tool surface is served through two transports: StreamableHTTP on `/mcp` and SSE compatibility endpoints on `/mcp/sse` and `/mcp/messages`.
+
 ## High-level flow
 
 1. Client sends `GET /v1/search?q=<query>`
@@ -23,16 +25,23 @@ flowchart LR
     P --> L[LLM Client\ninternal/llm]
     S --> SX[SearXNG\n/search?format=json]
     L --> OR[OpenRouter / OpenAI-compatible API]
+
+    MC[MCP Client] --> MT[MCP HTTP transports\ninternal/mcpserver]
+    MT --> SU[Upstream proxy client\ninternal/synthproxy]
+    SU --> A
 ```
 
 | Package | Role |
 |---|---|
-| `cmd/proxy` | Process entrypoint. Wires dependencies, starts HTTP server, handles graceful shutdown. |
-| `internal/api` | HTTP transport layer. Routes requests, decodes parameters, encodes JSON responses, maps errors. |
+| `cmd/proxy` | Main process entrypoint. Wires dependencies, starts the JSON API server, handles graceful shutdown. |
+| `cmd/mcp` | MCP process entrypoint. Wires the upstream proxy client, exposes the shared MCP handler, and serves StreamableHTTP plus SSE compatibility endpoints. |
+| `internal/api` | HTTP transport layer for the main proxy. Routes requests, decodes parameters, encodes JSON responses, maps errors. |
 | `internal/proxy` | Orchestration and business logic. Validates input, calls search and LLM, builds prompts, parses output. |
-| `internal/searx` | SearXNG adapter. Queries the JSON search endpoint, normalizes results. |
+| `internal/searx` | SearXNG adapter. Queries the JSON search endpoint and normalizes results. |
 | `internal/llm` | LLM adapter. Wraps the openai-go SDK for OpenRouter-compatible chat completions. |
 | `internal/config` | Configuration. Reads and validates environment variables with sensible defaults. |
+| `internal/mcpserver` | Shared MCP tool registration plus HTTP transport wiring for both StreamableHTTP and SSE. |
+| `internal/synthproxy` | HTTP client used by the MCP binary to call the main proxy's `/v1/search` API. |
 
 ## Request lifecycle
 
@@ -54,9 +63,28 @@ sequenceDiagram
     API-->>Client: 200 application/json
 ```
 
+## MCP wrapper lifecycle
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP client
+    participant MCP as cmd/mcp
+    participant Tools as internal/mcpserver
+    participant Upstream as internal/synthproxy
+    participant Proxy as cmd/proxy
+
+    Client->>MCP: StreamableHTTP /mcp or SSE /mcp/sse
+    MCP->>Tools: shared search tool handler
+    Tools->>Upstream: GET /v1/search?q=...
+    Upstream->>Proxy: HTTP request
+    Proxy-->>Upstream: JSON response
+    Upstream-->>Tools: normalized upstream result
+    Tools-->>Client: MCP tool result
+```
+
 ### Detailed steps
 
-1. **Validation**: The proxy service trims the query, rejects empty or too-long (>2048 byte) queries.
+1. **Validation**: The proxy service trims the query and rejects empty or too-long (>2048 byte) queries.
 2. **Search**: SearXNG is queried with `format=json`. Results are normalized (whitespace collapsed, empty URLs dropped).
 3. **Truncation**: Results are capped at `MAX_SEARCH_RESULTS` (default 5) and renumbered 1..N.
 4. **No-result shortcut**: If no usable results are found, the LLM is not called. A deterministic "no results" answer is returned.
@@ -100,11 +128,18 @@ The service is intentionally stateless in v1. Each request is independent. This 
 4. Invalid citations are silently dropped
 5. Only cited sources appear in the final response
 
+## MCP transport tradeoffs
+
+- StreamableHTTP at `/mcp` is the preferred transport for modern native MCP clients.
+- SSE remains available so existing remote MCP clients do not break.
+- Both transports share the same tool registration and upstream proxy client, so transport support can evolve without duplicating search logic.
+- The MCP binary remains a thin adapter layer and does not duplicate SearXNG or LLM orchestration.
+
 ## Tradeoffs / v1 limitations
 
-- **No streaming**: Responses are synchronous. The client waits for the full pipeline.
+- **No streaming search response**: `/v1/search` remains synchronous. The client waits for the full pipeline.
 - **No caching**: Every request hits SearXNG and the LLM. Costs are per-request.
 - **No retries**: Upstream failures fail fast. SDK retries are disabled (`WithMaxRetries(0)`).
-- **No persistence**: No database, no sessions, no request history.
+- **No persistence**: No database, no sessions, no request history in the main proxy.
 - **Single prompt strategy**: One system prompt + one user prompt. No multi-turn or follow-up.
 - **Fixed model**: One model per deployment. No per-request model selection.

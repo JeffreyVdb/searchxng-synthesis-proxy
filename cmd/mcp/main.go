@@ -1,8 +1,8 @@
-// Package main is the entry point for the MCP SSE server binary.
+// Package main is the entry point for the MCP HTTP server binary.
 //
 // The MCP server is a separate process from the main search synthesis proxy.
-// It exposes the search capability as an MCP tool over SSE, calling the main
-// proxy's /v1/search API as its upstream.
+// It exposes the search capability as an MCP tool over SSE and StreamableHTTP,
+// calling the main proxy's /v1/search API as its upstream.
 package main
 
 import (
@@ -87,15 +87,16 @@ func newServer(cfg config.MCPConfig, logger *slog.Logger) (*http.Server, error) 
 	httpClient := synthproxy.DefaultHTTPClient(cfg.RequestTimeout)
 	client := synthproxy.NewClient(cfg.ProxyBaseURL, httpClient)
 
-	handler := mcpserver.NewSSEHandler(logger, client, mcpserver.SSEOptions{
-		SSEEndpoint:     "/mcp/sse",
-		MessageEndpoint: "/mcp/messages",
+	handler := mcpserver.NewHTTPHandler(logger, client, mcpserver.HTTPOptions{
+		SSEEndpoint:            "/mcp/sse",
+		MessageEndpoint:        "/mcp/messages",
+		StreamableHTTPEndpoint: "/mcp",
 	})
 
 	return &http.Server{
-		Addr:         cfg.Addr(),
-		Handler:      handler,
-		ReadTimeout:  cfg.ReadTimeout,
+		Addr:        cfg.Addr(),
+		Handler:     handler,
+		ReadTimeout: cfg.ReadTimeout,
 		// WriteTimeout is intentionally 0 (or a long value) to keep SSE
 		// connections alive. Do NOT set a short write timeout here — it
 		// will break long-lived event streams.
