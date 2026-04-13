@@ -3,8 +3,8 @@ module github.com/JeffreyVdb/searchxng-synthesis-proxy
 go 1.26
 
 require (
-	github.com/mark3labs/mcp-go v0.46.0
-	github.com/openai/openai-go/v3 v3.30.0
+	github.com/mark3labs/mcp-go v0.47.1
+	github.com/openai/openai-go/v3 v3.31.0
 )
 
 require (
